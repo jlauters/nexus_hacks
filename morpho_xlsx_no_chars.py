@@ -2,6 +2,8 @@ import xlrd
 from nexus import NexusWriter
 from math import trunc
 
+
+# init
 nw = NexusWriter()
 book = xlrd.open_workbook("matrices/Appendix_S7_-_Morphological_matrix.xlsx")
 sh = book.sheet_by_index(0)
