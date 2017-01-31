@@ -1,51 +1,19 @@
 import os
 import sys
-import xlrd
-import json
-import requests
-from nexus import NexusWriter, NexusReader
-from math import trunc
+from matrix_mediator import matrixMediator
 
 
 # init
 dir_path = os.path.dirname(os.path.realpath(__file__))
 input_file = dir_path + '/' + sys.argv[1]
 
-# util
-def is_number(s):
-  try:
-    int(s)
-    return True
-  except ValueError:
-    return False
+mediator = matrixMediator(input_file)
 
-def verifyTaxa(sci_name):
+print "Handler:"
+print mediator.matrixHandler
 
-  sanitized_sci_name = sci_name.replace('H_', '')
 
-  print "in verifyTaxa, looking up name: " + sci_name
-
-  verifiedTaxa = []
-
-  # NCBI is what Morphobank uses, checking all to try to get as many verified as possible
-  data_sources = '4' 
-  gnparser_url = 'http://resolver.globalnames.org/name_resolvers.json?perferred_data_sources=' + data_sources + '&best_match_only=true&resolve_once=false&names='
- 
-  gnparser = requests.get(gnparser_url + sanitized_sci_name + '&with_context=true')
-  if 200 == gnparser.status_code:
-    gnp_json = json.loads( gnparser.content )
-
-    for data in gnp_json['data']:
-      if data['is_known_name']:
-        
-        verifiedTaxa.append({
-          "datasource": data['results'][0]['data_source_title'],
-          "match_value": data['results'][0]['match_value'],
-          "name_string": data['results'][0]['name_string']
-        })
-
-  return verifiedTaxa
-
+"""
 
 # check file
 if os.path.isfile(input_file):
@@ -79,11 +47,11 @@ if os.path.isfile(input_file):
     custom_block += "END;\n\n"
 
     #### quick and dirty append Custom Block ####
-    nexus_file = open(input_file, 'a')
+    nexus_file = codecs.open(input_file, 'a', 'utf-8')
     nexus_file.write(custom_block)
     nexus_file.close()
 
-  elif ".xlsx" == file_extension:
+  elif ".xlsx" == file_extension or ".xls" == file_extension:
 
     book = xlrd.open_workbook(input_file)
     sh = book.sheet_by_index(0)
@@ -138,24 +106,107 @@ if os.path.isfile(input_file):
             else:
               nw.add(taxon_name, cx, cell_value)
 
-  custom_block += ";\n"
-  custom_block += "END;\n"
+    custom_block += ";\n"
+    custom_block += "END;\n"
 
-  nw.write_to_file(filename="output.nex", interleave=False, charblock=False)
+    nw.write_to_file(filename="output.nex", interleave=False, charblock=False)
 
-  #### quick and dirty append Custom Block ####
-  nexus_file = open('output.nex', 'a')
-  nexus_file.write(custom_block)
-  nexus_file.close()
+    #### quick and dirty append Custom Block ####
+    nexus_file = open('output.nex', 'a')
+    nexus_file.write(custom_block)
+    nexus_file.close()
+
+  elif ".txt" == file_extension:
+    print "text file detected"
+ 
+    # Infer if Nexus or otherwise:
+    with open(input_file, 'r') as f:
+      first_line = f.readline()
+      xread_filename = f.readline()
+      xread_matrix_dimensions = f.readline()
+      lines = f.readlines()
+      f.close()
+
+      print "first line:"
+      print first_line
+
+    if "#NEXUS" == first_line.strip():
+      print "text file is nexus!"
+
+      # TODO: file to filename + .nex
+      # TODO: restart script / recall begining ( refactored ) function 
+
+    elif "xread" == first_line.strip():
+ 
+      print "xread format found"
+      dimensions = str(xread_matrix_dimensions).split(' ')
+
+      ncols = int(dimensions[0])
+      nrows = int(dimensions[1])
+
+      print 'rows: ' + str(nrows)
+      print 'cols: ' + str(ncols)
+
+
+      custom_block = "\n\nBEGIN VERIFIED_TAXA;\n"
+      custom_block += "Dimensions ntax=" + str(nrows) + " nchar=4;\n" 
+
+      # This could be a MatLab module to read excel files
+      # https://www.mathworks.com/matlabcentral/fileexchange/48551-the-x-collection/content/XRead.m?requestedDomain=www.mathworks.com
+
+      # this starts with line 4  since we check the first and second line above
+      line_buffer = ""
+      for l in lines:
+
+        if "proc/;" != l:
+
+          if line_buffer:
+            line_row = line_buffer + " " + l 
+          else:
+            line_row = l
+
+          if len(line_row) >= ncols:
+
+            # reconsitute broken rows, then remove space / tabbing issues
+            line_parts = line_row.split(' ')
+            line_parts = list(filter(None, line_parts))
+
+            taxon_name = line_parts[0]
+            taxon_chars = line_parts[1]
+
+            # verify taxa
+            verified_taxa = verifyTaxa(taxon_name)
+            verified_name = None 
+
+            if verified_taxa:
+              for taxa in verified_taxa:
+                verified_name = taxa['name_string'].lower()
+                custom_block += taxon_name + "    " + taxa['name_string'] + "    " + taxa['match_value'] + "    " + taxa['datasource'] + "\n"
+            else:
+              custom_block += taxon_name + "\n"
+
+         
+            line_buffer = ""
+
+          else: 
+            line_buffer += l.strip()
+
+
+
+      custom_block += ";\n"
+      custom_block += "END;\n"
+
+      print "Custom Block"
+      print custom_block
+
+    else:
+      print "no idea what to do with this ..."
+
+  else:
+    print "File extension is unrecognized"
 
 else:
   print "file not found"
 
-
-
-
-
-
-
-
+"""
 
