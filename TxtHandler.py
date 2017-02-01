@@ -1,6 +1,9 @@
+import os
+import time
 import codecs
+import numpy
 from matrix_utils import verifyTaxa
-
+from nexus import NexusWriter
 
 class TxtHandler():
   """ Txt File Type implementation of matrix handling needs """
@@ -42,10 +45,12 @@ class TxtHandler():
       self.nrows = int(dimensions[1])
 
       custom_block = "\n\nBEGIN VERIFIED_TAXA;\n"
-      custom_block += "Dimenstions ntax=" + str(self.nrows) + "nchar=4;\n"
+      custom_block += "Dimensions ntax=" + str(self.nrows) + " nchar=4;\n"
 
       matrix = ""
+      matrix_arr = []
       line_buffer = ""
+      row_taxa = []
       for l in lines:
         if ";proc/;" != l.strip():
 
@@ -61,8 +66,9 @@ class TxtHandler():
             line_parts = list(filter(None, line_parts))
 
             taxon_name = line_parts[0]
-            taxon_chars = line_parts[1].replace("[", "{")
-            taxon_chars = taxon_chars.replace("]", "}")
+            #taxon_chars = line_parts[1]
+            taxon_chars = line_parts[1].replace("[", "")
+            taxon_chars = taxon_chars.replace("]", "")
           
             #  verify taxa
             verified_taxa = verifyTaxa(taxon_name)
@@ -70,14 +76,21 @@ class TxtHandler():
 
             if verified_taxa:
               for taxa in verified_taxa:
-                verified_name = taxa['name_string'].lower()
+
+                # We split here to exclude the odd citation on the taxon name ( maybe regex what looks like name & name, year would be better )
+                verified_name = taxa['name_string'].lower().split(' ')
+                row_taxa.append( verified_name[0] )
+
                 custom_block += taxon_name + "    " + taxa['name_string'] + "    " + taxa['match_value'] + "    " + taxa['datasource'] + "\n"
 
-              matrix += "    " + verified_name + "    " + taxon_chars.strip() + "\n"
+              matrix += "    " + verified_name[0] + "    " + taxon_chars.strip() + "\n"
+              matrix_arr.append(taxon_chars.strip())
             else:
 
+              row_taxa.append( taxon_name )
               custom_block += taxon_name + "\n"
-              matrix += "    " + taxon_name.strip() + "    " + taxon_chars.strip() + "\n"
+              matrix += "    " + taxon_name + "    " + taxon_chars.strip() + "\n"
+              matrix_arr.append(taxon_chars.strip())
 
             line_buffer = ""
           else:
@@ -87,28 +100,61 @@ class TxtHandler():
       custom_block += "END;\n"
 
       self.custom_block = custom_block      
+
+      print "matrix array"
+      marr = []
+      for row in matrix_arr:
+
+        items = list(row)
+        open_index = []
+        idx = 0
+        for element in items:
+          if "{" == element:
+            open_index.append(idx)
+
+          idx = idx+1
+
+        reclaimed = 0
+        for oi in open_index:
+
+          oi = int( oi - reclaimed)
+          ci = int( oi + 4 )
  
-      #print "matrix content: "
-      #print matrix
+          items[oi:ci] = [''.join(items[oi:ci])]
+          reclaimed = reclaimed + 3
 
-      # print " We need to write NEXUS File"
-     
-      nexus_file = codecs.open('./nexus/' + xread_filename + '.nex', 'w', 'utf-8')
-      nexus_file.write("#NEXUS\n")
-      nexus_file.write("[Morphobank Generated Neuxus file]\n\n")
+        marr.append(items)
 
-      # Data Section
-      nexus_file.write("BEGIN DATA;\n")
-      nexus_file.write("    DIMENSIONS NTAX=" + str(self.nrows) + " NCHAR=" + str(self.ncols) + ";\n")
-      nexus_file.write('    FORMAT GAP=- MISSING=? DATATYPE=STANDARD SYMBOLS="  0 1 2 3";\n')
-      nexus_file.write("    MATRIX\n")
-      nexus_file.write(matrix)
-      nexus_file.write(";\nEND;\n\n")
+      m = numpy.matrix(marr)
+       
+      nw = NexusWriter()
+      nw.add_comment("Morphobank generated Nexus from xread .txt file ")
 
-      # Custom Block Section
-      nexus_file.write(custom_block)
-      nexus_file.close()      
+      for rx in range(self.nrows):
+        taxon_name = row_taxa[rx] 
+        cell_value = m.item(rx)
 
+        for cindex, cv in enumerate(cell_value):
+          char_no = cindex + 1
+          nw.add(taxon_name, char_no, cv)
+
+
+
+      nw.write_to_file(filename= xread_filename + '.nex', interleave=False, charblock=False)
+
+      # move to nexus folder
+      os.rename(xread_filename + ".nex", "./nexus/" + xread_filename + ".nex")
+
+      # wait for file to move before open and append
+      while not os.path.exists('./nexus/' + xread_filename + '.nex'):
+        time.sleep(1)
+ 
+      if os.path.isfile('./nexus/' + xread_filename + '.nex'):
+
+        # Custom Block Section
+        nexus_file = codecs.open('./nexus/' + xread_filename + '.nex', 'a', 'utf-8')
+        nexus_file.write(custom_block)
+        nexus_file.close()      
 
 
     else:
