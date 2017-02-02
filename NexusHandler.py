@@ -1,4 +1,5 @@
 import codecs
+import nexus
 from nexus import NexusReader
 from matrix_utils import verifyTaxa
 
@@ -11,7 +12,7 @@ class NexusHandler():
   custom_block = None
 
   def __init__(self, input_file):
-    self.input_File = input_file
+    self.input_file = input_file
     self.read_file()
 
   def read_file(self):
@@ -19,11 +20,41 @@ class NexusHandler():
     # If we have a nexus file already, we should verify the taxa and add custom block,
     # do any syntax cleanup needed to get Mesquire to parse without error.
 
-    nr = NexusReader(self.input_file)
+    try:
+      nr = NexusReader(self.input_file)
+
+    except nexus.reader.NexusFormatException, e:
+      taxa_nums = []
+      parts = str(e).split('(')
+      for part in parts:
+
+        mini_parts = part.split(')')
+        part = mini_parts[0]
+
+        if part.replace(')', '').isdigit():
+          print part.replace(')', '')
+          taxa_nums.append( int(part.replace(')','')) )
+
+      
+      filedata = None
+      with open(self.input_file, 'r') as file: 
+        filedata = file.read()
+
+      # TODO: dataype=mixed(type:range, type2:range2) cannot be read by mesquite but MrBayes can read/write mixed datatype matrices
+      filedata = filedata.replace("NTAX=" + str(taxa_nums[1]), "NTAX=" + str(taxa_nums[0]) )
+      filedata = filedata.replace("symbol=", "symbols=")
+      filedata = filedata.replace("inter;", "interleave;")
+
+      with open(self.input_file, 'w') as file:
+        file.write(filedata)
+
+      return False
+    
+
     self.nrows = nr.data.ntaxa
 
     custom_block = "\n\nBEGIN VERIFIED_TAXA;\n"
-    custom_block += "Dimensions ntax=" + str(nrows) + " nchar=4;\n"
+    custom_block += "Dimensions ntax=" + str(self.nrows) + " nchar=4;\n"
 
     for tax in nr.data.taxa:
     

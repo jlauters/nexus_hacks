@@ -15,10 +15,10 @@ class matrixMediator:
       filename, file_extension = os.path.splitext(input_file)
 
       if ".nex" == file_extension:
-        self.matrixHandler = NexusHandler()
+        self.matrixHandler = NexusHandler(input_file)
 
       elif ".xlsx" == file_extension or ".xls" == file_extension:
-        self.matrixHandler = XlsHandler()
+        self.matrixHandler = XlsHandler(input_file)
 
       elif ".txt" == file_extension:
         self.matrixHandler = TxtHandler(input_file)

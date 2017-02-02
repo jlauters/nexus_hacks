@@ -4,6 +4,7 @@ import codecs
 import numpy
 from matrix_utils import verifyTaxa
 from nexus import NexusWriter
+from NexusHandler import NexusHandler
 
 class TxtHandler():
   """ Txt File Type implementation of matrix handling needs """
@@ -23,6 +24,8 @@ class TxtHandler():
     with open( self.input_file, 'r') as f:
       self.first_line = f.readline()
    
+      # TODO: Needs work xread / tnt file format is loose
+
       # xread has some other potential clues
       xread_filename = f.readline().strip().replace("'", "")
       xread_matrix_dimensions = f.readline()
@@ -33,8 +36,12 @@ class TxtHandler():
     if "#NEXUS" == self.first_line.strip():
       print "text file is nexus"
   
-      # TODO: rename file to .nex
-      # TODO: restart mediator with new file
+      # move to nexus folder
+      filename, file_extension = os.path.splitext(self.input_file)
+      os.rename(self.input_file, filename + ".nex")
+
+      # send to correct matrix handler
+      matrixHandler = NexusHandler( filename + ".nex" )
 
     elif "xread" == self.first_line.strip():
     
@@ -67,8 +74,8 @@ class TxtHandler():
 
             taxon_name = line_parts[0]
             #taxon_chars = line_parts[1]
-            taxon_chars = line_parts[1].replace("[", "")
-            taxon_chars = taxon_chars.replace("]", "")
+            taxon_chars = line_parts[1].replace("[", "(")
+            taxon_chars = taxon_chars.replace("]", ")")
           
             #  verify taxa
             verified_taxa = verifyTaxa(taxon_name)
